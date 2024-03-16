@@ -35,26 +35,33 @@ var Visual = /** @class */ (function () {
         this.target = options.element;
         this.host = options.host;
         this.label = document.createElement('label');
-        this.label.textContent = " Node alignment  : ";
+        this.label.textContent = "X : ";
         options.element.appendChild(this.label);
         this.dropdownContainerX = document.createElement('select');
         options.element.appendChild(this.dropdownContainerX);
         this.dropdownContainerX.style.marginRight = "10px";
+        var xAxisOptions = ["left", "right", "center", 'justify'];
+        xAxisOptions.forEach(function (option) {
+            var xAxisOption = document.createElement('option');
+            xAxisOption.value = option;
+            xAxisOption.textContent = option;
+            _this.dropdownContainerX.appendChild(xAxisOption);
+        });
         this.svg = d3.select(options.element).append("svg");
         this.barContainer = this.svg.append("g").classed("bar-container", true);
-        Object.keys(NodeAlignment).forEach(function (key) {
-            if (isNaN(Number(key))) {
-                var option = document.createElement('option');
-                option.value = NodeAlignment[key];
-                option.textContent = key;
-                _this.dropdownContainerX.appendChild(option);
-            }
-        });
     }
     Visual.prototype.update = function (options) {
+        var _this = this;
         var dataView = options.dataViews[0];
-        var data = this.converter(dataView);
-        this.render(data);
+        this.data = this.converter(dataView);
+        // Clear previous nodes and links
+        this.barContainer.selectAll('.node, .link').remove();
+        this.dropdownContainerX.addEventListener('change', function () {
+            _this.nodeAlignment = _this.dropdownContainerX.value;
+            _this.barContainer.selectAll('.node, .link').remove(); // Clear previous nodes and links
+            _this.render(_this.data);
+        });
+        this.render(this.data);
     };
     Visual.prototype.converter = function (dataView) {
         var nodes = [];
@@ -99,11 +106,30 @@ var Visual = /** @class */ (function () {
     Visual.prototype.render = function (data) {
         var width = this.target.clientWidth;
         var height = this.target.clientHeight;
+        var nodeAlignFunction;
+        switch (this.nodeAlignment) {
+            case NodeAlignment.Left:
+                nodeAlignFunction = d3_sankey_1.sankeyLeft;
+                break;
+            case NodeAlignment.Right:
+                nodeAlignFunction = d3_sankey_1.sankeyRight;
+                break;
+            case NodeAlignment.Center:
+                nodeAlignFunction = d3_sankey_1.sankeyCenter;
+                break;
+            default:
+                nodeAlignFunction = d3_sankey_1.sankeyJustify;
+                break;
+        }
+        // Clear previous strokes and text elements
+        this.svg.selectAll('.link').remove();
+        this.svg.selectAll('text').remove();
         this.svg.attr('width', width).attr('height', height);
         var sankeyLayout = (0, d3_sankey_1.sankey)()
             .nodeWidth(15)
             .nodePadding(10)
-            .extent([[1, 5], [width - 1, height - 5]]);
+            .nodeAlign(nodeAlignFunction)
+            .extent([[1, 5], [this.target.clientWidth - 1, this.target.clientHeight - 5]]);
         var _a = sankeyLayout(data), nodes = _a.nodes, links = _a.links;
         var nodeGroup = this.barContainer
             .selectAll('.node')
@@ -120,6 +146,7 @@ var Visual = /** @class */ (function () {
             .selectAll('path')
             .data(links)
             .enter().append('path')
+            .attr('class', 'link') // Add class to identify links
             .attr('d', (0, d3_sankey_1.sankeyLinkHorizontal)())
             .attr('stroke', function (d) { return d.color ? "".concat(d.color, "40") : 'black'; })
             .attr('stroke-width', function (d) { var _a; return Math.max(1, (_a = d.width) !== null && _a !== void 0 ? _a : 0); })

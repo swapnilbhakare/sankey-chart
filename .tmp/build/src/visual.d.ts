@@ -8,6 +8,7 @@ export declare class Visual implements IVisual {
     private host;
     private barContainer;
     private svg;
+    private data;
     private label;
     private dropdownContainerX;
     private nodeAlignment;

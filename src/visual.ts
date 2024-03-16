@@ -9,7 +9,7 @@ import IVisual = powerbi.extensibility.visual.IVisual;
 import IVisualHost = powerbi.extensibility.visual.IVisualHost;
 import DataView = powerbi.DataView;
 import * as d3 from 'd3'
-import { sankey, sankeyCenter, sankeyLinkHorizontal } from 'd3-sankey';
+import { sankey, sankeyCenter, sankeyLeft, sankeyRight, sankeyJustify, sankeyLinkHorizontal } from 'd3-sankey';
 
 interface SankeyChartData {
     nodes: SankeyNode[];
@@ -37,12 +37,12 @@ enum NodeAlignment {
     Center = 'center',
     Justify = 'justify',
 }
-
 export class Visual implements IVisual {
     private target: HTMLElement;
     private host: IVisualHost;
     private barContainer: d3.Selection<SVGElement, any, any, any>;
     private svg: d3.Selection<SVGElement, any, any, any>;
+    private data: SankeyChartData;
 
     private label: HTMLLabelElement
     private dropdownContainerX: HTMLSelectElement
@@ -51,38 +51,45 @@ export class Visual implements IVisual {
         this.target = options.element;
         this.host = options.host;
 
-
         this.label = document.createElement('label');
-        this.label.textContent = " Node alignment  : ";
+        this.label.textContent = "X : ";
         options.element.appendChild(this.label);
+
         this.dropdownContainerX = document.createElement('select');
         options.element.appendChild(this.dropdownContainerX);
         this.dropdownContainerX.style.marginRight = "10px";
+        const xAxisOptions = ["left", "right", "center", 'justify']
 
-
-        this.svg = d3.select(options.element).append("svg");
-
-
-        this.barContainer = this.svg.append("g").classed("bar-container", true);
-
-        Object.keys(NodeAlignment).forEach(key => {
-            if (isNaN(Number(key))) {
-                const option = document.createElement('option');
-                option.value = NodeAlignment[key];
-                option.textContent = key;
-                this.dropdownContainerX.appendChild(option);
-            }
+        xAxisOptions.forEach(option => {
+            const xAxisOption = document.createElement('option');
+            xAxisOption.value = option;
+            xAxisOption.textContent = option;
+            this.dropdownContainerX.appendChild(xAxisOption);
         });
 
-
+        this.svg = d3.select(options.element).append("svg");
+        this.barContainer = this.svg.append("g").classed("bar-container", true);
 
     }
+
 
     public update(options: VisualUpdateOptions) {
         const dataView: DataView = options.dataViews[0];
-        let data: SankeyChartData = this.converter(dataView);
-        this.render(data);
+        this.data = this.converter(dataView);
+
+        // Clear previous nodes and links
+        this.barContainer.selectAll('.node, .link').remove();
+
+        this.dropdownContainerX.addEventListener('change', () => {
+            this.nodeAlignment = this.dropdownContainerX.value as NodeAlignment;
+            this.barContainer.selectAll('.node, .link').remove(); // Clear previous nodes and links
+            this.render(this.data)
+        });
+        this.render(this.data)
     }
+
+
+
 
     private converter(dataView: DataView): SankeyChartData {
         let nodes: SankeyNode[] = [];
@@ -132,16 +139,34 @@ export class Visual implements IVisual {
     private render(data: SankeyChartData) {
         const width = this.target.clientWidth;
         const height = this.target.clientHeight;
+        let nodeAlignFunction;
+        switch (this.nodeAlignment) {
+            case NodeAlignment.Left:
+                nodeAlignFunction = sankeyLeft;
+                break;
+            case NodeAlignment.Right:
+                nodeAlignFunction = sankeyRight;
+                break;
+            case NodeAlignment.Center:
+                nodeAlignFunction = sankeyCenter;
+                break;
+            default:
+                nodeAlignFunction = sankeyJustify;
+                break;
+        }
+
+        // Clear previous strokes and text elements
+        this.svg.selectAll('.link').remove();
+        this.svg.selectAll('text').remove();
 
         this.svg.attr('width', width).attr('height', height);
-
         const sankeyLayout = sankey<SankeyNode, SankeyLink>()
             .nodeWidth(15)
             .nodePadding(10)
-            .extent([[1, 5], [width - 1, height - 5]]);
+            .nodeAlign(nodeAlignFunction)
+            .extent([[1, 5], [this.target.clientWidth - 1, this.target.clientHeight - 5]]);
 
         const { nodes, links } = sankeyLayout(data);
-
 
         const nodeGroup = this.barContainer
             .selectAll('.node')
@@ -159,11 +184,11 @@ export class Visual implements IVisual {
             .selectAll('path')
             .data(links)
             .enter().append('path')
+            .attr('class', 'link') // Add class to identify links
             .attr('d', sankeyLinkHorizontal())
             .attr('stroke', d => d.color ? `${d.color}40` : 'black')
             .attr('stroke-width', d => Math.max(1, d.width ?? 0))
-            .attr('fill', 'none')
-
+            .attr('fill', 'none');
 
         const textGroup = this.svg.append('g')
             .selectAll("text")
@@ -176,15 +201,8 @@ export class Visual implements IVisual {
             .attr("dy", "0.35em")
             .attr("text-anchor", d => (d.x0 < width / 2) ? "start" : "end")
             .text(d => d.name)
-            .style("fill", d => d.color)
+            .style("fill", d => d.color);
     }
-
-
-
-
-
-
-
 
 
 
